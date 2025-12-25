@@ -1,9 +1,3 @@
-Here is the professional `README.md` for the **Legacy Code Archaeologist**. This documentation assumes the user is downloading the repository we have just architected.
-
-It covers installation, the "Why" behind the tool, and critical troubleshooting steps for the Tree-sitter build process.
-
-***
-
 # 🏛️ Legacy Code Archaeologist
 
 > **"Turn spaghetti code into a treasure map."**
