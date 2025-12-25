@@ -1,365 +1,144 @@
+Here is the professional `README.md` for the **Legacy Code Archaeologist**. This documentation assumes the user is downloading the repository we have just architected.
 
+It covers installation, the "Why" behind the tool, and critical troubleshooting steps for the Tree-sitter build process.
 
----
+***
 
-# 🏛️ The Legacy Code Archaeologist: Architectural Blueprint
+# 🏛️ Legacy Code Archaeologist
 
-**Objective:** Build a CLI tool that visualizes technical debt by parsing spaghetti code, analyzing it with AI, and generating an interactive HTML knowledge graph.
+> **"Turn spaghetti code into a treasure map."**
 
-## 1. High-Level Architecture & Stack
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Tree-sitter](https://img.shields.io/badge/Parser-Tree--sitter-green.svg)](https://tree-sitter.github.io/)
+[![AI Powered](https://img.shields.io/badge/AI-OpenAI%20GPT4-orange.svg)](https://openai.com/)
 
-*   **Language:** Python 3.11+
-*   **Parser:** **Tree-sitter** (Polyglot parsing, robust against syntax errors).
-*   **AI Engine:** **LangChain** + **OpenAI (GPT-4o)** for semantic analysis and risk scoring.
-*   **Visualization:** **Mermaid.js** (Text-to-Diagram) embedded in HTML.
-*   **CLI:** **Typer** (User interface).
-*   **Database:** **SQLite** (Local caching to save API costs).
+**Legacy Code Archaeologist** is a CLI tool designed to audit, map, and analyze complex legacy codebases. It combines static analysis (Tree-sitter) with semantic AI analysis (LLMs) to generate an interactive HTML Knowledge Graph.
 
----
-
-## 2. Project Setup
-
-### Folder Structure
-Follow this **Service-Repository** pattern to separate parsing logic from AI logic.
-
-```text
-legacy_archaeologist/
-│
-├── core/
-│   ├── __init__.py
-│   ├── file_walker.py        # Recursive file finder (ignores node_modules)
-│   ├── parser_engine.py      # Tree-sitter wrapper (CST extraction)
-│   ├── graph_builder.py      # Converts data to Mermaid syntax
-│   └── cache_manager.py      # SQLite caching system
-│
-├── ai/
-│   ├── __init__.py
-│   ├── summarizer.py         # LangChain logic (Code -> JSON Analysis)
-│   └── prompts.py            # System prompts
-│
-├── templates/
-│   └── report_template.html  # HTML skeleton
-│
-├── main.py                   # CLI Entry point
-├── requirements.txt          # Dependencies
-├── Dockerfile                # Container config
-├── docker-compose.yml        # Orchestration
-└── .env                      # API Keys
-```
-
-### Dependencies (`requirements.txt`)
-```text
-python-dotenv==1.0.0
-typer[all]==0.9.0
-rich==13.7.0
-tree-sitter==0.20.4
-tree-sitter-languages==1.10.0
-langchain==0.1.0
-langchain-openai==0.0.5
-networkx==3.2.1
-```
+It answers the question: *"Which files are the 'God Objects' that break everything when I touch them?"*
 
 ---
 
-## 3. Phase 1: The Core Infrastructure
+## ✨ Features
 
-### A. The File Walker (`core/file_walker.py`)
-Finds relevant source files while aggressively pruning "junk" folders like `.git` or `node_modules`.
-
-```python
-import os
-from typing import List, Generator
-
-class FileWalker:
-    def __init__(self, root_dir: str, extensions: List[str] = None):
-        self.root_dir = os.path.abspath(root_dir)
-        self.extensions = [e.lower() for e in extensions] if extensions else ['.py']
-        self.ignore_dirs = {'.git', '__pycache__', 'node_modules', 'venv', 'env', 'dist', 'build'}
-
-    def walk(self) -> Generator[str, None, None]:
-        print(f"🔎 Scanning: {self.root_dir}...")
-        for root, dirs, files in os.walk(self.root_dir, topdown=True):
-            # In-place list modification to prune recursion
-            dirs[:] = [d for d in dirs if d not in self.ignore_dirs]
-            
-            for file in files:
-                if any(file.lower().endswith(ext) for ext in self.extensions):
-                    yield os.path.join(root, file)
-```
-
-### B. The Parser Engine (`core/parser_engine.py`)
-Uses Tree-sitter to extract classes, functions, and imports without executing the code.
-
-```python
-import os
-from tree_sitter_languages import get_language, get_parser
-
-class CodeParser:
-    def __init__(self, language_name="python"):
-        self.language_name = language_name
-        self.language = get_language(language_name)
-        self.parser = get_parser(language_name)
-        
-        # S-Expressions for extraction
-        self.QUERIES = {
-            "python": """
-            (class_definition name: (identifier) @class_name)
-            (function_definition name: (identifier) @function_name)
-            (import_from_statement module_name: (dotted_name) @import_src)
-            (import_statement name: (dotted_name) @import_lib)
-            """
-        }
-
-    def parse_file(self, file_path):
-        if not os.path.exists(file_path): return {}
-        
-        with open(file_path, "rb") as f:
-            code_bytes = f.read()
-
-        tree = self.parser.parse(code_bytes)
-        query = self.language.query(self.QUERIES.get(self.language_name))
-        captures = query.captures(tree.root_node)
-
-        results = {"classes": [], "functions": [], "imports": []}
-        
-        for node, tag in captures:
-            text = code_bytes[node.start_byte : node.end_byte].decode("utf8")
-            if tag == "class_name": results["classes"].append(text)
-            elif tag == "function_name": results["functions"].append(text)
-            elif tag in ["import_src", "import_lib"]: results["imports"].append(text)
-            
-        return results
-```
+*   **🗺️ Interactive Visualization:** Generates a **Mermaid.js** graph showing file dependencies.
+*   **🤖 AI Risk Scoring:** Uses OpenAI (GPT-4) to read code, summarize business logic, and assign a **Complexity Score (1-10)**.
+*   **⚡ Smart Caching:** Implements MD5 hashing (SQLite) to ensure you never pay to analyze the same file twice.
+*   **🌳 Robust Parsing:** Uses **Tree-sitter** instead of Regex, so it understands code structure even if the syntax is messy.
+*   **🐳 Containerized:** Ready to run via Docker to avoid dependency hell.
 
 ---
 
-## 4. Phase 2: The Intelligence Layer (AI)
+## 🚀 Quick Start (Docker)
 
-### The Summarizer (`ai/summarizer.py`)
-Uses LangChain to force Structured JSON output regarding the code's risk and purpose.
+The easiest way to run the tool without compiling C-dependencies manually.
 
-```python
-from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import ResponseSchema, StructuredOutputParser
-
-class CodeSummarizer:
-    def __init__(self, model_name="gpt-4-turbo-preview"):
-        self.llm = ChatOpenAI(model=model_name, temperature=0.0)
-        
-        # Define expected JSON structure
-        schemas = [
-            ResponseSchema(name="summary", description="1-sentence explanation of responsibility."),
-            ResponseSchema(name="tags", description="List of 1-3 keywords (e.g., 'Auth', 'DB')."),
-            ResponseSchema(name="complexity_score", description="Int 1-10. 10 is technical debt.")
-        ]
-        self.output_parser = StructuredOutputParser.from_response_schemas(schemas)
-        self.format_instructions = self.output_parser.get_format_instructions()
-
-    def analyze_file(self, filename, code_content, metadata):
-        # Truncate strictly for cost control
-        truncated_code = code_content[:6000] 
-        
-        template = """
-        Analyze source file: "{filename}"
-        Metadata: {metadata}
-        --- CODE ---
-        {code}
-        --- END ---
-        Provide summary, tags, and risk score (1-10).
-        {format_instructions}
-        """
-        
-        prompt = ChatPromptTemplate.from_template(template)
-        chain = prompt | self.llm | self.output_parser
-        
-        try:
-            return chain.invoke({
-                "filename": filename,
-                "metadata": str(metadata),
-                "code": truncated_code,
-                "format_instructions": self.format_instructions
-            })
-        except Exception:
-            return {"summary": "Analysis Failed", "complexity_score": 0, "tags": []}
-```
-
----
-
-## 5. Phase 3: Optimization & Caching
-
-### The Cache Manager (`core/cache_manager.py`)
-Prevents re-analyzing files that haven't changed using MD5 hashing.
-
-```python
-import sqlite3
-import hashlib
-
-class CacheManager:
-    def __init__(self, db_path="archeology_cache.db"):
-        self.conn = sqlite3.connect(db_path)
-        self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS file_cache 
-            (file_hash TEXT PRIMARY KEY, ai_summary TEXT, complexity_score INTEGER, tags TEXT)
-        """)
-
-    def get(self, content):
-        h = hashlib.md5(content.encode()).hexdigest()
-        row = self.conn.execute("SELECT ai_summary, complexity_score, tags FROM file_cache WHERE file_hash=?", (h,)).fetchone()
-        if row:
-            return {"summary": row[0], "complexity_score": row[1], "tags": row[2].split(",")}
-        return None
-
-    def save(self, content, data):
-        h = hashlib.md5(content.encode()).hexdigest()
-        self.conn.execute("INSERT OR REPLACE INTO file_cache VALUES (?,?,?,?)", 
-            (h, data['summary'], data['complexity_score'], ",".join(data['tags'])))
-        self.conn.commit()
-```
-
----
-
-## 6. Phase 4: Visualization
-
-### The Graph Builder (`core/graph_builder.py`)
-Generates Mermaid syntax with dynamic color coding based on risk scores.
-
-```python
-class MermaidGenerator:
-    def __init__(self, nodes):
-        self.nodes = nodes
-
-    def sanitize(self, name):
-        return name.replace(".", "_").replace("/", "_").replace("-", "_")
-
-    def generate_graph(self):
-        lines = ["graph TD"]
-        # Styles
-        lines.append("classDef danger fill:#ffcccc,stroke:#ff0000,stroke-width:2px;")
-        lines.append("classDef warning fill:#fff4cc,stroke:#ffaa00,stroke-width:2px;")
-        lines.append("classDef safe fill:#ccffcc,stroke:#00aa00,stroke-width:1px;")
-
-        for node in self.nodes:
-            nid = self.sanitize(node['short_name'])
-            risk = node.get('complexity_score', 0)
-            style = "danger" if risk >= 8 else "warning" if risk >= 5 else "safe"
-            
-            lines.append(f'    {nid}("{node["short_name"]}<br/>Risk: {risk}"):::{style}')
-            
-            for imp in node.get('imports', []):
-                # Simple heuristic linkage
-                for target in self.nodes:
-                    if imp == target['short_name'].replace(".py", ""):
-                        lines.append(f"    {nid} --> {self.sanitize(target['short_name'])}")
-                        
-        return "\n".join(lines)
-```
-
----
-
-## 7. Phase 5: The Controller (`main.py`)
-
-Integrates all modules into a CLI command.
-
-```python
-import os, typer, json
-from rich.console import Console
-from rich.progress import track
-from dotenv import load_dotenv
-
-from core.file_walker import FileWalker
-from core.parser_engine import CodeParser
-from core.graph_builder import MermaidGenerator
-from core.cache_manager import CacheManager
-from ai.summarizer import CodeSummarizer
-
-load_dotenv()
-app = typer.Typer()
-console = Console()
-
-@app.command()
-def audit(path: str, output: str = "report.html"):
-    walker = FileWalker(path)
-    parser = CodeParser("python")
-    cache = CacheManager()
-    
-    ai_active = bool(os.getenv("OPENAI_API_KEY"))
-    summarizer = CodeSummarizer() if ai_active else None
-    
-    analyzed_nodes = []
-    
-    for file_path in track(list(walker.walk()), description="Auditing..."):
-        # 1. Parse Structure
-        data = parser.parse_file(file_path)
-        data['short_name'] = os.path.basename(file_path)
-        
-        # 2. Read Content
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
-
-        # 3. Check Cache -> AI Analysis
-        if ai_active:
-            cached_data = cache.get(content)
-            if cached_data:
-                data.update(cached_data)
-            else:
-                ai_data = summarizer.analyze_file(data['short_name'], content, data)
-                cache.save(content, ai_data)
-                data.update(ai_data)
-        
-        analyzed_nodes.append(data)
-
-    # 4. Generate Output
-    mermaid_code = MermaidGenerator(analyzed_nodes).generate_graph()
-    
-    with open("templates/report_template.html", "r") as f:
-        html = f.read().replace("", mermaid_code)
-        
-    with open(output, "w") as f:
-        f.write(html)
-        
-    console.print(f"[bold green]Done![/bold green] Report saved to {output}")
-
-if __name__ == "__main__":
-    app()
-```
-
----
-
-## 8. Deployment (Docker)
-
-**Dockerfile**
-```dockerfile
-FROM python:3.11-slim
-RUN apt-get update && apt-get install -y build-essential gcc && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-ENTRYPOINT ["python", "main.py"]
-```
-
-**docker-compose.yml**
-```yaml
-version: '3.8'
-services:
-  archeologist:
-    build: .
-    env_file: .env
-    volumes:
-      - ./reports:/app/reports
-      - /path/to/target/project:/codebase
-    command: audit /codebase --output reports/final.html
-```
-
----
-
-## 9. Usage Guide
-
-1.  **Install:** `pip install -r requirements.txt`
-2.  **Configure:** Add `OPENAI_API_KEY` to `.env`.
-3.  **Run:**
+1.  **Clone the repository:**
     ```bash
-    python main.py audit ./my_legacy_project
+    git clone https://github.com/yourusername/legacy-archaeologist.git
+    cd legacy-archaeologist
     ```
-4.  **View:** Open `report.html` to see the color-coded architectural map.
+
+2.  **Set your API Key:**
+    Create a `.env` file in the root:
+    ```bash
+    echo "OPENAI_API_KEY=sk-your-api-key-here" > .env
+    ```
+
+3.  **Run the Audit:**
+    Map your target project to the `/codebase` volume.
+    ```bash
+    # Update the path below to point to the project you want to analyze
+    docker-compose run --rm archeologist audit /codebase --output reports/audit.html
+    ```
+    *(Note: Ensure your `docker-compose.yml` mounts the volume correctly as defined in the blueprints).*
+
+---
+
+## 🛠️ Local Installation (Python)
+
+If you prefer running it natively, you will need Python 3.11+ and a C compiler (GCC/Clang) for Tree-sitter.
+
+### 1. Environment Setup
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 2. Configuration
+Create a `.env` file in the root directory:
+```ini
+OPENAI_API_KEY=sk-your-openai-key
+```
+*If no API key is provided, the tool runs in "Offline Mode" (Structure only, no Summaries).*
+
+### 3. Usage
+```bash
+# Basic Audit
+python main.py audit /path/to/target/project
+
+# Specify Output Location
+python main.py audit ./my-project --output ./results/map.html
+```
+
+---
+
+## 📊 Interpreting the Report
+
+Open the generated HTML file in your browser.
+
+### The Graph (Left Panel)
+*   **Nodes:** Represent source files.
+*   **Arrows:** Represent imports/dependencies.
+*   **Colors:**
+    *   🔴 **Red (Danger):** High Risk (Score 8-10). Complex logic, high coupling.
+    *   🟠 **Orange (Warning):** Moderate Risk (Score 5-7).
+    *   🟢 **Green (Safe):** Low Risk (Score 1-4). Simple utilities or interfaces.
+
+### The Cards (Right Panel)
+*   **Summary:** A 1-sentence explanation of *what* the code actually does (generated by AI).
+*   **Tags:** Keywords like `Auth`, `Database`, `Legacy`, `API`.
+*   **Metrics:** Function count and Import count.
+
+---
+
+## 🏗️ Architecture
+
+The tool follows a pipeline architecture:
+
+1.  **FileWalker (`core/file_walker.py`):**
+    Recursively scans the directory, intelligently ignoring `.git`, `node_modules`, and `venv`.
+2.  **Parser (`core/parser_engine.py`):**
+    Uses **Tree-sitter** to extract the Concrete Syntax Tree (CST). It identifies classes, functions, and imports.
+3.  **Cache Check (`core/cache_manager.py`):**
+    Calculates the MD5 hash of the file content. If it exists in `archeology_cache.db`, it loads the data locally.
+4.  **AI Analyst (`ai/summarizer.py`):**
+    If not cached, sends the code "Skeleton" to OpenAI. The prompt forces a structured JSON response containing the Risk Score and Summary.
+5.  **Graph Builder (`core/graph_builder.py`):**
+    Compiles the nodes and edges into Mermaid syntax, handling ID sanitization to prevent graph breakage.
+6.  **Reporter (`main.py`):**
+    Injects the Mermaid Syntax and HTML Cards into `templates/report_template.html`.
+
+---
+
+## ❓ Troubleshooting
+
+**Q: I get `ImportError: cannot import name '...' from 'tree_sitter'`**
+*   **A:** Reinstall the dependencies. Tree-sitter requires a C compiler. On Windows, install Visual Studio Build Tools. On Mac/Linux, ensure `gcc` is installed.
+    *   `pip uninstall tree-sitter tree-sitter-languages`
+    *   `pip install tree-sitter tree-sitter-languages --no-cache-dir`
+
+**Q: The AI analysis is taking too long/costing too much.**
+*   **A:** The tool processes files sequentially. For large projects (>500 files), use the Docker method and let it run in the background. The **Caching** system ensures you only pay for the first run. Subsequent runs are free unless you modify the code.
+
+**Q: The graph is a giant messy hairball.**
+*   **A:** Legacy code is often a hairball! However, you can filter the view in the future by modifying `core/graph_builder.py` to only show edges for files with Risk > 5.
+
+---
+
+## 📜 License
+
+MIT License. Feel free to fork, modify, and dig up your own digital ruins.
