@@ -2,7 +2,7 @@
   "name": "Legacy Code Archaeologist",
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "workspaceFolder": "/workspaces/${Legacy-Code-Archaeologist}",
   "customizations": {
     "vscode": {
       "extensions": [
